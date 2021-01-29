@@ -4,8 +4,10 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.apache.http.HttpHost;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -14,7 +16,6 @@ import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.springframework.stereotype.Service;
-import top.luchchuan.entity.PageResult;
 import top.luchchuan.mapper.SkuMapper;
 import top.luchchuan.pojo.Sku;
 import top.luchchuan.service.SkuService;
@@ -38,18 +39,23 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements SkuSe
 
     @Override
     public Boolean init() throws Exception {
+        //建立连接
         RestHighLevelClient client = new RestHighLevelClient(
                 RestClient.builder(
                         HttpHost.create("http://node1:9200")
                 ));
-
+        //判断索引库是否存在，有则删除
         GetIndexRequest request = new GetIndexRequest("sku");
         boolean exists = client.indices().exists(request, RequestOptions.DEFAULT);
         if (!exists) {
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest("sku");
-            CreateIndexResponse createIndexResponse = client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
+            DeleteIndexRequest deleteRequest = new DeleteIndexRequest("sku");
+            AcknowledgedResponse deleteIndexResponse = client.indices().delete(deleteRequest, RequestOptions.DEFAULT);
         }
+        //创建索引库
+        CreateIndexRequest createIndexRequest = new CreateIndexRequest("sku");
+        CreateIndexResponse createIndexResponse = client.indices().create(createIndexRequest, RequestOptions.DEFAULT);
 
+        //分页查询并插入
         Integer total = baseMapper.findTotal();
         int num = total % 1000;
         int totalPage = num == 0 ? total / 1000 : total / 1000 + 1;
@@ -65,6 +71,7 @@ public class SkuServiceImpl extends ServiceImpl<SkuMapper, Sku> implements SkuSe
 
         }
 
+        //释放资源
         try {
             client.close();
         } catch (IOException e) {
